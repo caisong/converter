@@ -118,24 +118,26 @@ HWND getCurrentScintillaHandle() {
 
 const TCHAR *pluginConfName = TEXT("converter.ini");
 const TCHAR *ascii2HexSectionName = TEXT("ascii2Hex");
-const TCHAR *ascii2HexSpace = TEXT("insertSpace");
+//const TCHAR *ascii2HexSpace = TEXT("insertSpace");
+const TCHAR *ascii2HexPartion = TEXT("insertPartition");
 const TCHAR *ascii2HexMaj = TEXT("uppercase");
 const TCHAR *ascii2HexNbCharPerLine = TEXT("nbCharPerLine");
 
-void getCmdsFromConf(const TCHAR *confPath, Param & param)
+void getCmdsFromConf(const TCHAR *pConfPath, Param & _param)
 {
 	TCHAR cmdNames[MAX_PATH];
-	::GetPrivateProfileSectionNames(cmdNames, MAX_PATH, confPath);
+	::GetPrivateProfileSectionNames(cmdNames, MAX_PATH, pConfPath);
 	TCHAR *pFn = cmdNames;
 
 	if (*pFn && wcscmp(pFn, ascii2HexSectionName) == 0)
 	{
-		int val = GetPrivateProfileInt(pFn, ascii2HexSpace, 0, confPath);
-		param._insertSpace = val != 0;
-		val = GetPrivateProfileInt(pFn, ascii2HexMaj, 0, confPath);
-		param._isMaj = val != 0;
-		val = GetPrivateProfileInt(pFn, ascii2HexNbCharPerLine, 0, confPath);
-		param._nbCharPerLine = val;
+		//int val = GetPrivateProfileInt(pFn, ascii2HexSpace, 0, pConfPath);
+		//_param._insertSpace = val != 0;
+		int val = GetPrivateProfileString(pFn, ascii2HexPartion, TEXT(" "), _param._insertPartition, sizeof(_param._insertPartition), pConfPath);
+		val = GetPrivateProfileInt(pFn, ascii2HexMaj, 0, pConfPath);
+		_param._isMaj = val != 0;
+		val = GetPrivateProfileInt(pFn, ascii2HexNbCharPerLine, 0, pConfPath);
+		_param._nbCharPerLine = val;
 	}
 }
 // 
@@ -156,6 +158,7 @@ void loadConfFile()
 ; * nbCharPerLine:this parameter allows you to break line. The value you set is the number of ascii character per line. Set the value from 0 to whatever you want.\n\
 [ascii2Hex]\n\
 insertSpace=0\n\
+insertPartition=\\x\n\
 uppercase=1\n\
 nbCharPerLine=16\n\
 \n";
@@ -183,7 +186,14 @@ nbCharPerLine=16\n\
 
 void ascii2Hex()
 {
-	ascii2hex(param._insertSpace, param._isMaj, param._nbCharPerLine);
+	//ascii2hex(param._insertSpace, param._isMaj, param._nbCharPerLine);
+#ifdef UNICODE
+	char insertPartition[32] = { 0 };
+	WideCharToMultiByte(CP_ACP, 0, param._insertPartition, -1, insertPartition, sizeof(insertPartition), NULL, NULL);
+#else 
+	char *insertPartition = param._insertPartition;
+#endif
+	ascii2hex(param._isMaj, param._nbCharPerLine, insertPartition);
 }
 
 
@@ -264,6 +274,15 @@ int getTrueHexValue(char c)
 // 
 bool HexString::toAscii()
 {
+#ifdef UNICODE
+	char insertPartition[32] = { 0 };
+	WideCharToMultiByte(CP_ACP, 0, param._insertPartition, -1, insertPartition, sizeof(insertPartition), NULL, NULL);
+	ascii2hex(param._isMaj, param._nbCharPerLine, insertPartition);
+#else
+	char *insertPartition = param._insertPartition;
+#endif // UNICODE
+
+
 	size_t l = length();
 	bool hasWs = false;
 	if (!l || l < 2) return false;
@@ -288,12 +307,19 @@ bool HexString::toAscii()
 			if (stat != st_cc) return false;
 			stat = st_init;
 		}
+
+		if (0 == strncmp(_str + i, insertPartition, strlen(insertPartition))) 
+		{
+			i += strlen(insertPartition)-1;
+		}
+
 		/*
 		else if (_str[i] == '\t')
 		{
 			
 		}
 		*/
+		
 		else if ((_str[i] == '\n') || (_str[i] == '\r'))
 		{
 			if ((stat != st_cc) && (stat != st_init)) return false;
@@ -346,7 +372,7 @@ bool HexString::toAscii()
 	return true;
 }
 
-void ascii2hex(bool insertSpace, bool isMaj, size_t nbCharPerLine)
+void ascii2hex(bool isMaj, size_t nbCharPerLine, const char * insertPartition)
 {
 	SelectedString selText;
 	size_t textLen = selText.length();
@@ -360,7 +386,9 @@ void ascii2hex(bool insertSpace, bool isMaj, size_t nbCharPerLine)
 	{
 		eolNbChar = (textLen / nbCharPerLine) * eolNbCharUnit;
 	}
-	size_t inc = insertSpace?3:2;
+
+	size_t inc = 2 + strlen(insertPartition);
+
 	char *pDestText = new char[textLen*(inc+eolNbChar)+1];
 
 	size_t j = 0;
@@ -388,18 +416,9 @@ void ascii2hex(bool insertSpace, bool isMaj, size_t nbCharPerLine)
 			return;
 		}
 
-		if (!insertSpace || isEOL)
-		{
-			format = isMaj?"%02X":"%02x";
-			sprintf(pDestText + j, format, (unsigned char)val);
-			j += 2;
-		}
-		else
-		{
-			format = isMaj?"%02X ":"%02x ";
-			sprintf(pDestText + j, format, (unsigned char)val);
-			j += 3;
-		}
+		format = isMaj ? "%s%02X" : "%s%02x";
+		sprintf(pDestText + j, format, insertPartition, (unsigned char) val);
+		j += strlen(insertPartition) + 2;
 
 		if (isEOL)
 		{

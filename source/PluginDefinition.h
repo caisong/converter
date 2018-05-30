@@ -117,9 +117,9 @@ bool setCommand(size_t index, TCHAR *cmdName, PFUNCPLUGINCMD pFunc, ShortcutKey 
 
 struct Param  {
 	bool _isMaj;
-	bool _insertSpace;
+	TCHAR _insertPartition[16];
 	size_t _nbCharPerLine;
-	Param():_isMaj(true),_insertSpace(false), _nbCharPerLine(0) {};
+	Param() :_isMaj(true), _nbCharPerLine(0) { _insertPartition[0] = '\0'; };
 };
 
 class SelectedString {
@@ -168,7 +168,7 @@ public:
 
 void getCmdsFromConf(const TCHAR *confPath, Param & param);
 void loadConfFile();
-void ascii2hex(bool insertSpace, bool isMaj, size_t nbCharPerLine);
+void ascii2hex(bool isMaj, size_t nbCharPerLine, const char *insertPartition);
 void ascii2Hex();
 int getTrueHexValue(char c);
 void hex2Ascii();
